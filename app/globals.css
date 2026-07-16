@@ -1,0 +1,108 @@
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink: #1b1b2f;
+  --cream: #fff8ec;
+  --paper: #ffffff;
+  --guru: #f2a93b;
+  --siswa: #2fbf9f;
+  --accent-soft: #ffe3a8;
+  --danger: #e35b5b;
+  --ok: #2fbf6a;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--cream);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+h1, h2, h3, .font-display {
+  font-family: 'Baloo 2', 'Inter', system-ui, sans-serif;
+}
+
+.font-kode {
+  font-family: 'Space Mono', monospace;
+  letter-spacing: 0.12em;
+}
+
+/* Fokus keyboard tetap terlihat jelas (aksesibilitas) */
+:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@layer components {
+  /* Kartu bergaya "neo" — border tebal + bayangan solid, ciri khas PELITA */
+  .card-neo {
+    background-color: var(--paper);
+    border: 3px solid var(--ink);
+    border-radius: 1.25rem;
+    box-shadow: 6px 6px 0 0 var(--ink);
+  }
+
+  .card-neo-sm {
+    border: 3px solid var(--ink);
+    border-radius: 1rem;
+    box-shadow: 4px 4px 0 0 var(--ink);
+  }
+
+  .btn-neo {
+    border: 3px solid var(--ink);
+    border-radius: 0.9rem;
+    font-weight: 800;
+    box-shadow: 4px 4px 0 0 var(--ink);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+
+  .btn-neo:hover:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 0 var(--ink);
+  }
+
+  .btn-neo:active:not(:disabled) {
+    transform: translate(4px, 4px);
+    box-shadow: 0 0 0 0 var(--ink);
+  }
+
+  .btn-neo:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .input-neo {
+    border: 3px solid var(--ink);
+    border-radius: 0.9rem;
+    background-color: var(--paper);
+  }
+
+  .input-neo:focus {
+    background-color: var(--accent-soft);
+  }
+
+  .badge-neo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    font-weight: 800;
+    font-size: 0.8rem;
+  }
+}

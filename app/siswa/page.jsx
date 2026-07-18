@@ -10,13 +10,16 @@ export default function PendaftaranSiswa() {
   
   // State untuk Simulasi Soal
   const [allParams, setAllParams] = useState([]);
+  const [daftarSoal, setDaftarSoal] = useState([]); // Hasil batch dari AI
   const [currentIndex, setCurrentIndex] = useState(0);
   const [soalAI, setSoalAI] = useState('');
+  
+  // State interaksi
   const [isLoading, setIsLoading] = useState(false);
   const [jawaban, setJawaban] = useState('');
   const [skor, setSkor] = useState(0);
 
-  // Register
+  // 1. REGISTER
   const handleRegister = async (e) => {
     e.preventDefault();
     setIsLoading(true);
@@ -43,87 +46,72 @@ export default function PendaftaranSiswa() {
     }
   };
 
-  // Fetch Soal
-  const fetchSoalAI = async (param) => {
-    setIsLoading(true);
+  // 2. PILIH MODUL & FETCH BATCH SOAL DARI AI
+  const handlePilihModul = async (modulId) => {
+    setIsLoading(true); // Kunci layar agar siswa tidak spam klik
     try {
+      // Ambil parameter soal dari database
+      const { data: params } = await supabase.from('parameter_soal').select('*').eq('modul_id', modulId);
+      if (!params || params.length === 0) throw new Error("Modul ini belum memiliki soal!");
+
+      // Tembak API Backend dengan data batch
       const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           siswaId: siswaInfo.id,
-          parameterId: param.id,
           citaCita: siswaInfo.cita_cita,
-          tipeSoal: param.tipe,
-          angkaDasar: param.angka_dasar
+          parameters: params.map(p => ({ id: p.id, tipe: p.tipe, angkaDasar: p.angka_dasar }))
         })
       });
+      
       const data = await res.json();
-      setSoalAI(data.soal);
+      
+      // Validasi ketat jika server membalas dengan status error (500/504)
+      if (!res.ok) throw new Error(data.error || 'Server menolak permintaan.');
+      if (!data.daftarSoal || data.daftarSoal.length === 0) throw new Error('AI mengembalikan data kosong.');
+
+      // Jika sukses, simpan semua ke state lokal
+      setAllParams(params);
+      setDaftarSoal(data.daftarSoal);
+      setCurrentIndex(0);
+      setSoalAI(data.daftarSoal[0].soal);
+      setStep('simulasi');
+      
     } catch (err) {
-      alert("Gagal memuat tantangan baru.");
+      // LOGIKA ERROR TERBONGKAR: Cetak ke console dan tampilkan pesan asli ke layar
+      console.error("ERROR LOAD SOAL BATCH:", err);
+      alert(`Oops! Terjadi masalah: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const [daftarSoal, setDaftarSoal] = useState([]); // hasil batch dari AI
+  // 3. KIRIM JAWABAN (Instan, karena baca dari state lokal)
+  const handleKirimJawaban = async (e) => {
+    e.preventDefault();
+    const currentParam = allParams[currentIndex];
 
-// Pilih modul 
-const handlePilihModul = async (modulId) => {
-  const { data: params } = await supabase.from('parameter_soal').select('*').eq('modul_id', modulId);
-  if (!params || params.length === 0) return alert("Modul belum ada soal!");
+    if (Number(jawaban) === currentParam.jawaban_sistem) {
+      alert("🎉 BENAR! Melanjutkan ke soal berikutnya...");
+      const newSkor = skor + 20;
+      setSkor(newSkor);
+      await supabase.from('siswa').update({ progress: newSkor }).eq('id', siswaInfo.id);
 
-  setIsLoading(true);
-  try {
-    const res = await fetch('/api/ai', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        siswaId: siswaInfo.id,
-        citaCita: siswaInfo.cita_cita,
-        parameters: params.map(p => ({ id: p.id, tipe: p.tipe, angkaDasar: p.angka_dasar }))
-      })
-    });
-    const data = await res.json();
-    if (!data.daftarSoal) throw new Error(data.error || 'Gagal generate soal');
-
-    setAllParams(params);
-    setDaftarSoal(data.daftarSoal);
-    setCurrentIndex(0);
-    setSoalAI(data.daftarSoal[0].soal);
-    setStep('simulasi');
-  } catch (err) {
-    alert("Gagal memuat soal. Coba lagi.");
-  } finally {
-    setIsLoading(false);
-  }
-};
-
-// 4. KIRIM JAWABAN — tidak perlu fetch lagi, tinggal ambil dari daftarSoal
-const handleKirimJawaban = async (e) => {
-  e.preventDefault();
-  const currentParam = allParams[currentIndex];
-
-  if (Number(jawaban) === currentParam.jawaban_sistem) {
-    alert("🎉 BENAR! Melanjutkan ke soal berikutnya...");
-    const newSkor = skor + 20;
-    setSkor(newSkor);
-    await supabase.from('siswa').update({ progress: newSkor }).eq('id', siswaInfo.id);
-
-    if (currentIndex + 1 < allParams.length) {
-      const nextIndex = currentIndex + 1;
-      setCurrentIndex(nextIndex);
-      setJawaban('');
-      setSoalAI(daftarSoal[nextIndex].soal); 
+      if (currentIndex + 1 < allParams.length) {
+        const nextIndex = currentIndex + 1;
+        setCurrentIndex(nextIndex);
+        setJawaban('');
+        setSoalAI(daftarSoal[nextIndex].soal); 
+      } else {
+        alert("Selesai! Kamu telah menuntaskan modul ini.");
+        setStep('dashboard');
+      }
     } else {
-      alert("Selesai! Kamu telah menuntaskan modul ini.");
-      setStep('dashboard');
+      alert("Yah, kurang tepat. Ayo coba lagi!");
     }
-  } else {
-    alert("Yah, kurang tepat. Ayo coba lagi!");
-  }
-};
+  };
+
   return (
     <div className="min-h-screen bg-[#F4F9F9] p-4 md:p-8 font-sans">
       {step === 'register' && (
@@ -133,7 +121,9 @@ const handleKirimJawaban = async (e) => {
             <input required placeholder="Nama Panggilan" className="w-full p-4 border-2 border-black rounded-xl" onChange={(e) => setFormData({...formData, nama: e.target.value})} />
             <input required placeholder="Cita-cita" className="w-full p-4 border-2 border-black rounded-xl" onChange={(e) => setFormData({...formData, citaCita: e.target.value})} />
             <input required placeholder="Kode Kelas" className="w-full p-4 border-2 border-black rounded-xl uppercase" onChange={(e) => setFormData({...formData, kodeKelas: e.target.value.toUpperCase()})} />
-            <button className="w-full bg-black text-white py-4 rounded-xl font-bold">Masuk ke Kelas</button>
+            <button disabled={isLoading} className={`w-full text-white py-4 rounded-xl font-bold ${isLoading ? 'bg-gray-400' : 'bg-black'}`}>
+              {isLoading ? 'Memproses...' : 'Masuk ke Kelas'}
+            </button>
           </form>
         </div>
       )}
@@ -150,7 +140,13 @@ const handleKirimJawaban = async (e) => {
             {modulList.map(m => (
               <div key={m.id} className="bg-white p-6 rounded-3xl border-2 border-black hover:translate-y-[-4px] transition-transform">
                 <h4 className="font-bold text-lg mb-4">📚 {m.judul}</h4>
-                <button onClick={() => handlePilihModul(m.id)} className="w-full bg-black text-white py-3 rounded-xl font-bold">Mulai</button>
+                <button 
+                  onClick={() => handlePilihModul(m.id)} 
+                  disabled={isLoading}
+                  className={`w-full text-white py-3 rounded-xl font-bold ${isLoading ? 'bg-gray-400' : 'bg-black'}`}
+                >
+                  {isLoading ? 'Menyiapkan Soal...' : 'Mulai'}
+                </button>
               </div>
             ))}
           </div>

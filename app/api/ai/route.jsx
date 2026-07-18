@@ -6,6 +6,9 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// Fungsi pembantu untuk memberi jeda (istirahat) jika server Google sibuk
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 export async function POST(request) {
   try {
     const { siswaId, citaCita, parameters } = await request.json();
@@ -43,11 +46,21 @@ export async function POST(request) {
       ]
     `;
 
-    // Menggunakan model yang stabil dan cepat
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-    const result = await model.generateContent(prompt);
     
-    // Membersihkan respons AI dari sisa-sisa markdown agar JSON valid
+    // MEKANISME RETRY: Coba panggil Gemini maksimal 3 kali
+    let result;
+    for (let i = 0; i < 3; i++) {
+      try {
+        result = await model.generateContent(prompt);
+        break; // Jika berhasil, langsung keluar dari loop
+      } catch (apiError) {
+        console.warn(`Percobaan ke-${i + 1} ke Gemini gagal. API sibuk.`);
+        if (i === 2) throw apiError; // Jika percobaan ke-3 masih gagal, lemparkan errornya
+        await sleep(3000 * (i + 1)); // Tunggu 3 detik, lalu 6 detik sebelum mencoba lagi
+      }
+    }
+    
     let teks = result.response.text().trim();
     teks = teks.replace(/```json/g, '').replace(/```/g, '').trim();
 
@@ -68,7 +81,6 @@ export async function POST(request) {
     const { data, error } = await supabase.from('sesi_latihan').insert(rowsToInsert).select();
     if (error) throw error;
 
-    // Menghubungkan ID Sesi yang baru dibuat dengan masing-masing soal
     const hasil = daftarSoal.map(item => ({
       parameterId: item.parameterId,
       soal: item.soal,
@@ -78,7 +90,7 @@ export async function POST(request) {
     return NextResponse.json({ daftarSoal: hasil }, { status: 200 });
 
   } catch (error) {
-    console.error("ERROR AI BATCH:", error);
-    return NextResponse.json({ error: 'Gagal membuat soal dari AI' }, { status: 500 });
+    console.error("ERROR AI BATCH FINAL:", error);
+    return NextResponse.json({ error: 'Sistem AI sedang padat, silakan coba lagi.' }, { status: 500 });
   }
 }

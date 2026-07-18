@@ -1,16 +1,19 @@
 'use client'
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 
 export default function PendaftaranSiswa() {
+  const router = useRouter();
   const [step, setStep] = useState('register'); 
-  const [formData, setFormData] = useState({ nama: '', citaCita: '', kodeKelas: '' });
+  // Tambahkan username dan password ke state awal
+  const [formData, setFormData] = useState({ nama: '', citaCita: '', kodeKelas: '', username: '', password: '' });
   const [siswaInfo, setSiswaInfo] = useState(null);
   const [modulList, setModulList] = useState([]);
   
   // State untuk Simulasi Soal
   const [allParams, setAllParams] = useState([]);
-  const [daftarSoal, setDaftarSoal] = useState([]); // Hasil batch dari AI
+  const [daftarSoal, setDaftarSoal] = useState([]); 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [soalAI, setSoalAI] = useState('');
   
@@ -18,6 +21,26 @@ export default function PendaftaranSiswa() {
   const [isLoading, setIsLoading] = useState(false);
   const [jawaban, setJawaban] = useState('');
   const [skor, setSkor] = useState(0);
+
+  // LOGIKA PELINDUNG & BYPASS OTOMATIS
+  useEffect(() => {
+    const sesiData = localStorage.getItem('sesi_siswa');
+    
+    if (sesiData) {
+      const siswa = JSON.parse(sesiData);
+      setSiswaInfo(siswa);
+      
+      // Ambil daftar modul secara otomatis tanpa harus register ulang
+      const fetchModulSiswa = async () => {
+        const { data: daftarModul } = await supabase.from('modul').select('*').eq('kelas_id', siswa.kelas_id);
+        setModulList(daftarModul || []);
+        setStep('dashboard'); // Lewati form register, langsung ke dashboard
+      };
+      
+      fetchModulSiswa();
+    }
+    // Ingat: Kita TIDAK melakukan router.push('/login') di sini agar siswa baru tetap bisa mendaftar.
+  }, []);
 
   // 1. REGISTER
   const handleRegister = async (e) => {
@@ -27,20 +50,30 @@ export default function PendaftaranSiswa() {
       const { data: kelasData } = await supabase.from('kelas').select('id').eq('kode_join', formData.kodeKelas).single();
       if (!kelasData) throw new Error("Kelas tidak ditemukan");
 
-      const { data: siswaBaru } = await supabase.from('siswa').insert([{
-        nama: formData.nama,
-        cita_cita: formData.citaCita,
-        kelas_id: kelasData.id,
-        progress: 0
-      }]).select().single();
+      const res = await fetch('/api/siswa/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nama: formData.nama,
+          username: formData.username,
+          password: formData.password, // Data 8 karakter siap dikirim ke backend untuk di-hash
+          kelas_id: kelasData.id
+        })
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error);
+
+      // Simpan ke localStorage agar tidak perlu login lagi jika di-refresh
+      localStorage.setItem('sesi_siswa', JSON.stringify(result.siswa));
 
       const { data: daftarModul } = await supabase.from('modul').select('*').eq('kelas_id', kelasData.id);
-      
-      setSiswaInfo(siswaBaru);
+      setSiswaInfo(result.siswa);
       setModulList(daftarModul || []);
       setStep('dashboard');
+
     } catch (err) {
-      alert("Gagal masuk kelas. Cek kode kembali.");
+      alert(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -48,13 +81,11 @@ export default function PendaftaranSiswa() {
 
   // 2. PILIH MODUL & FETCH BATCH SOAL DARI AI
   const handlePilihModul = async (modulId) => {
-    setIsLoading(true); // Kunci layar agar siswa tidak spam klik
+    setIsLoading(true); 
     try {
-      // Ambil parameter soal dari database
       const { data: params } = await supabase.from('parameter_soal').select('*').eq('modul_id', modulId);
       if (!params || params.length === 0) throw new Error("Modul ini belum memiliki soal!");
 
-      // Tembak API Backend dengan data batch
       const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -67,11 +98,9 @@ export default function PendaftaranSiswa() {
       
       const data = await res.json();
       
-      // Validasi ketat jika server membalas dengan status error (500/504)
       if (!res.ok) throw new Error(data.error || 'Server menolak permintaan.');
       if (!data.daftarSoal || data.daftarSoal.length === 0) throw new Error('AI mengembalikan data kosong.');
 
-      // Jika sukses, simpan semua ke state lokal
       setAllParams(params);
       setDaftarSoal(data.daftarSoal);
       setCurrentIndex(0);
@@ -79,7 +108,6 @@ export default function PendaftaranSiswa() {
       setStep('simulasi');
       
     } catch (err) {
-      // LOGIKA ERROR TERBONGKAR: Cetak ke console dan tampilkan pesan asli ke layar
       console.error("ERROR LOAD SOAL BATCH:", err);
       alert(`Oops! Terjadi masalah: ${err.message}`);
     } finally {
@@ -87,7 +115,7 @@ export default function PendaftaranSiswa() {
     }
   };
 
-  // 3. KIRIM JAWABAN (Instan, karena baca dari state lokal)
+  // 3. KIRIM JAWABAN
   const handleKirimJawaban = async (e) => {
     e.preventDefault();
     const currentParam = allParams[currentIndex];
@@ -119,8 +147,14 @@ export default function PendaftaranSiswa() {
           <h2 className="text-3xl font-bold mb-6 text-center">Mulai Petualangan! 🚀</h2>
           <form onSubmit={handleRegister} className="space-y-4">
             <input required placeholder="Nama Panggilan" className="w-full p-4 border-2 border-black rounded-xl" onChange={(e) => setFormData({...formData, nama: e.target.value})} />
+            
+            {/* Input Username & Password Baru */}
+            <input required placeholder="Username (Tanpa Spasi)" pattern="^\S+$" title="Username tidak boleh menggunakan spasi" className="w-full p-4 border-2 border-black rounded-xl" onChange={(e) => setFormData({...formData, username: e.target.value})} />
+            <input required type="password" minLength={8} placeholder="Password (Min. 8 Karakter)" className="w-full p-4 border-2 border-black rounded-xl" onChange={(e) => setFormData({...formData, password: e.target.value})} />
+            
             <input required placeholder="Cita-cita" className="w-full p-4 border-2 border-black rounded-xl" onChange={(e) => setFormData({...formData, citaCita: e.target.value})} />
             <input required placeholder="Kode Kelas" className="w-full p-4 border-2 border-black rounded-xl uppercase" onChange={(e) => setFormData({...formData, kodeKelas: e.target.value.toUpperCase()})} />
+            
             <button disabled={isLoading} className={`w-full text-white py-4 rounded-xl font-bold ${isLoading ? 'bg-gray-400' : 'bg-black'}`}>
               {isLoading ? 'Memproses...' : 'Masuk ke Kelas'}
             </button>
@@ -135,6 +169,16 @@ export default function PendaftaranSiswa() {
               <h2 className="text-2xl font-bold">Halo, Calon {siswaInfo.cita_cita}! 👋</h2>
               <p className="font-bold text-gray-500">Skor Total: <span className="text-black">{skor}</span></p>
             </div>
+            {/* Opsi tambahan: Tombol Keluar (Logout) yang baik untuk UX */}
+            <button 
+              onClick={() => {
+                localStorage.removeItem('sesi_siswa');
+                window.location.href = '/login';
+              }} 
+              className="bg-red-500 text-white px-4 py-2 rounded-xl font-bold border-2 border-black hover:bg-red-600 transition-colors"
+            >
+              Keluar
+            </button>
           </div>
           <div className="grid md:grid-cols-2 gap-4">
             {modulList.map(m => (

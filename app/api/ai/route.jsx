@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -6,52 +8,77 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 export async function POST(request) {
   try {
-    // 1. Tangkap SEMUA data yang dikirim dari Frontend
-    const { siswaId, parameterId, citaCita, tipeSoal, angkaDasar } = await request.json();
+    const { siswaId, citaCita, parameters } = await request.json();
 
-    // Validasi ketat
-    if (!siswaId || !citaCita || !tipeSoal || !angkaDasar) {
-      return NextResponse.json({ error: 'Data siswa atau soal tidak lengkap' }, { status: 400 });
+    if (!siswaId || !citaCita || !Array.isArray(parameters) || parameters.length === 0) {
+      return NextResponse.json({ error: 'Data tidak lengkap' }, { status: 400 });
     }
 
-    // 2. Rekayasa Prompt (Menghubungkan data Guru dengan AI)
+    const daftarSoalPrompt = parameters.map((p, idx) => `
+      Soal ke-${idx + 1} (parameterId: "${p.id}"):
+      - Tipe: ${p.tipe}
+      - Data angka WAJIB dipakai: ${JSON.stringify(p.angkaDasar)}
+    `).join('\n');
+
     const prompt = `
-      Kamu adalah pembuat soal cerita matematika yang menyenangkan.
-      Buat 1 soal cerita tentang ${tipeSoal} dengan tema profesi: ${citaCita}.
-      
+      Kamu adalah pembuat soal cerita matematika yang menyenangkan untuk anak-anak.
+      Buat ${parameters.length} soal cerita dengan tema profesi: ${citaCita}. 
+      Soal yang dibuat terkait dalam ruang lingkup materi pecahan dan perbandingan.
+
+      Daftar soal yang harus dibuat:
+      ${daftarSoalPrompt}
+
       ATURAN MUTLAK:
-      1. Kamu WAJIB menggunakan angka-angka dari data JSON berikut ke dalam cerita secara natural:
-         Data Angka: ${JSON.stringify(angkaDasar)}
-      2. JANGAN PERNAH menuliskan jawaban akhir, rumus, atau cara menghitungnya.
-      3. Akhiri cerita dengan kalimat tanya yang menantang.
+      1. Setiap soal WAJIB pakai angka dari datanya masing-masing secara natural.
+      2. JANGAN PERNAH menuliskan jawaban akhir, rumus, atau cara menghitung.
+      3. Setiap soal diakhiri kalimat tanya yang menantang.
       4. Gunakan bahasa Indonesia yang mudah dipahami.
+      5. Cerita antar soal harus berbeda-beda, jangan berulang.
+
+      WAJIB kembalikan HANYA JSON array, TANPA teks lain, TANPA markdown code block,
+      persis format ini:
+      [
+        { "parameterId": "...", "soal": "..." },
+        { "parameterId": "...", "soal": "..." }
+      ]
     `;
 
-    // 3. Panggil Gemini (MENGGUNAKAN NAMA MODEL DARI KATALOG BARU)
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+    // Menggunakan model yang stabil dan cepat
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     const result = await model.generateContent(prompt);
-    const teksSoalAi = result.response.text();
+    
+    // Membersihkan respons AI dari sisa-sisa markdown agar JSON valid
+    let teks = result.response.text().trim();
+    teks = teks.replace(/```json/g, '').replace(/```/g, '').trim();
 
-    // 4. Simpan rekam jejak ke Supabase (Tabel sesi_latihan)
-    const { data, error } = await supabase
-      .from('sesi_latihan')
-      .insert([{
-          siswa_id: siswaId,
-          parameter_id: parameterId,
-          teks_soal_ai: teksSoalAi
-      }])
-      .select();
+    let daftarSoal;
+    try {
+      daftarSoal = JSON.parse(teks);
+    } catch {
+      console.error("Gagal parse JSON dari AI:", teks);
+      throw new Error("Format balasan AI tidak valid");
+    }
 
+    const rowsToInsert = daftarSoal.map(item => ({
+      siswa_id: siswaId,
+      parameter_id: item.parameterId,
+      teks_soal_ai: item.soal
+    }));
+
+    const { data, error } = await supabase.from('sesi_latihan').insert(rowsToInsert).select();
     if (error) throw error;
 
-    // 5. Kembalikan data soal ke UI Siswa
-    return NextResponse.json({ 
-      idSesi: data[0].id, 
-      soal: teksSoalAi 
-    }, { status: 200 });
+    // Menghubungkan ID Sesi yang baru dibuat dengan masing-masing soal
+    const hasil = daftarSoal.map(item => ({
+      parameterId: item.parameterId,
+      soal: item.soal,
+      idSesi: data.find(d => d.parameter_id === item.parameterId)?.id
+    }));
+
+    return NextResponse.json({ daftarSoal: hasil }, { status: 200 });
 
   } catch (error) {
-    console.error("ERROR AI:", error);
+    console.error("ERROR AI BATCH:", error);
     return NextResponse.json({ error: 'Gagal membuat soal dari AI' }, { status: 500 });
   }
 }

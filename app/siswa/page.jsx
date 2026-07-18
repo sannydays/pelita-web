@@ -16,7 +16,7 @@ export default function PendaftaranSiswa() {
   const [jawaban, setJawaban] = useState('');
   const [skor, setSkor] = useState(0);
 
-  // 1. REGISTER
+  // Register
   const handleRegister = async (e) => {
     e.preventDefault();
     setIsLoading(true);
@@ -43,7 +43,7 @@ export default function PendaftaranSiswa() {
     }
   };
 
-  // 2. FETCH SOAL DARI AI
+  // Fetch Soal
   const fetchSoalAI = async (param) => {
     setIsLoading(true);
     try {
@@ -67,41 +67,63 @@ export default function PendaftaranSiswa() {
     }
   };
 
-  // 3. PILIH MODUL
-  const handlePilihModul = async (modulId) => {
-    const { data: params } = await supabase.from('parameter_soal').select('*').eq('modul_id', modulId);
-    if (!params || params.length === 0) return alert("Modul belum ada soal!");
-    
+  const [daftarSoal, setDaftarSoal] = useState([]); // hasil batch dari AI
+
+// Pilih modul 
+const handlePilihModul = async (modulId) => {
+  const { data: params } = await supabase.from('parameter_soal').select('*').eq('modul_id', modulId);
+  if (!params || params.length === 0) return alert("Modul belum ada soal!");
+
+  setIsLoading(true);
+  try {
+    const res = await fetch('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        siswaId: siswaInfo.id,
+        citaCita: siswaInfo.cita_cita,
+        parameters: params.map(p => ({ id: p.id, tipe: p.tipe, angkaDasar: p.angka_dasar }))
+      })
+    });
+    const data = await res.json();
+    if (!data.daftarSoal) throw new Error(data.error || 'Gagal generate soal');
+
     setAllParams(params);
+    setDaftarSoal(data.daftarSoal);
     setCurrentIndex(0);
-    await fetchSoalAI(params[0]);
+    setSoalAI(data.daftarSoal[0].soal);
     setStep('simulasi');
-  };
+  } catch (err) {
+    alert("Gagal memuat soal. Coba lagi.");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
-  // 4. KIRIM JAWABAN
-  const handleKirimJawaban = async (e) => {
-    e.preventDefault();
-    const currentParam = allParams[currentIndex];
-    
-    if (Number(jawaban) === currentParam.jawaban_sistem) {
-      alert("🎉 BENAR! Melanjutkan ke soal berikutnya...");
-      const newSkor = skor + 20;
-      setSkor(newSkor);
-      await supabase.from('siswa').update({ progress: newSkor }).eq('id', siswaInfo.id);
-      
-      if (currentIndex + 1 < allParams.length) {
-        setCurrentIndex(prev => prev + 1);
-        setJawaban('');
-        await fetchSoalAI(allParams[currentIndex + 1]);
-      } else {
-        alert("Selesai! Kamu telah menuntaskan modul ini.");
-        setStep('dashboard');
-      }
+// 4. KIRIM JAWABAN — tidak perlu fetch lagi, tinggal ambil dari daftarSoal
+const handleKirimJawaban = async (e) => {
+  e.preventDefault();
+  const currentParam = allParams[currentIndex];
+
+  if (Number(jawaban) === currentParam.jawaban_sistem) {
+    alert("🎉 BENAR! Melanjutkan ke soal berikutnya...");
+    const newSkor = skor + 20;
+    setSkor(newSkor);
+    await supabase.from('siswa').update({ progress: newSkor }).eq('id', siswaInfo.id);
+
+    if (currentIndex + 1 < allParams.length) {
+      const nextIndex = currentIndex + 1;
+      setCurrentIndex(nextIndex);
+      setJawaban('');
+      setSoalAI(daftarSoal[nextIndex].soal); 
     } else {
-      alert("Yah, kurang tepat. Ayo coba lagi!");
+      alert("Selesai! Kamu telah menuntaskan modul ini.");
+      setStep('dashboard');
     }
-  };
-
+  } else {
+    alert("Yah, kurang tepat. Ayo coba lagi!");
+  }
+};
   return (
     <div className="min-h-screen bg-[#F4F9F9] p-4 md:p-8 font-sans">
       {step === 'register' && (

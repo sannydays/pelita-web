@@ -87,28 +87,29 @@ export default function PendaftaranSiswa() {
       if (!params || params.length === 0) throw new Error("Modul ini belum memiliki soal!");
 
       // ===============================
-      // MODE TESTING (HARDCODED)
+      // MODE TESTING (HARDCODED) — Tema Profesi: ARSITEK
+      // Materi: Perbandingan & Skala, dibungkus narasi simulasi karier arsitek
       // ===============================
       const dummySoal = [
         {
-          soal: "Nina mempunyai 5,75 meter kain. Ia menggunakan 2,48 meter untuk membuat taplak meja. Berapa meter kain yang masih dimiliki Nina?",
-          jawaban: 3.27
+          soal: "Kamu adalah arsitek yang sedang menggambar denah rumah. Skala gambar yang kamu pakai adalah 1:100. Pada gambar, panjang ruang tamu adalah 3,5 cm. Berapa meter panjang ruang tamu yang sebenarnya?",
+          jawaban: 3.5
         },
         {
-          soal: "Sebuah kolam berisi 12,6 liter air. Kemudian ditambahkan lagi 7,85 liter air. Berapa liter air di dalam kolam sekarang?",
-          jawaban: 20.45
+          soal: "Sekarang kamu merancang denah taman sekolah dengan skala 1:200. Pada gambar, panjang taman adalah 8 cm. Berapa meter panjang taman yang sebenarnya?",
+          jawaban: 16
         },
         {
-          soal: "Pak Andi memiliki 9,5 kg beras. Ia membagikan 3,75 kg kepada tetangganya. Berapa kilogram beras yang masih dimiliki Pak Andi?",
-          jawaban: 5.75
+          soal: "Untuk membuat lantai teras, kamu mencampur pasir dan semen dengan perbandingan 3:2. Jika total campuran yang dibutuhkan adalah 50 kg, berapa kg semen yang harus disiapkan?",
+          jawaban: 20
         },
         {
-          soal: "Siti membeli 2,4 kg apel dan 3,65 kg jeruk. Berapa total berat buah yang dibeli Siti?",
-          jawaban: 6.05
+          soal: "Kamu merancang kolam ikan dengan skala gambar 1:50. Pada gambar, panjang kolam adalah 6 cm. Berapa meter panjang kolam yang sebenarnya?",
+          jawaban: 3
         },
         {
-          soal: "Terdapat 7,2 liter sirup yang akan dibagi rata ke dalam 6 botol. Berapa liter sirup yang ada di setiap botol?",
-          jawaban: 1.2
+          soal: "Sebuah rumah memiliki perbandingan luas kamar tidur dan ruang tamu sebesar 2:3. Jika luas ruang tamu adalah 12 meter persegi, berapa meter persegi luas kamar tidur?",
+          jawaban: 8
         }
       ];
 

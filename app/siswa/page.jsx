@@ -86,26 +86,59 @@ export default function PendaftaranSiswa() {
       const { data: params } = await supabase.from('parameter_soal').select('*').eq('modul_id', modulId);
       if (!params || params.length === 0) throw new Error("Modul ini belum memiliki soal!");
 
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          siswaId: siswaInfo.id,
-          citaCita: siswaInfo.cita_cita,
-          parameters: params.map(p => ({ id: p.id, tipe: p.tipe, angkaDasar: p.angka_dasar }))
-        })
-      });
-      
-      const data = await res.json();
-      
-      if (!res.ok) throw new Error(data.error || 'Server menolak permintaan.');
-      if (!data.daftarSoal || data.daftarSoal.length === 0) throw new Error('AI mengembalikan data kosong.');
+      // ===============================
+      // MODE TESTING (HARDCODED)
+      // ===============================
+      const dummySoal = [
+        {
+          soal: "Nina mempunyai 5,75 meter kain. Ia menggunakan 2,48 meter untuk membuat taplak meja. Berapa meter kain yang masih dimiliki Nina?",
+          jawaban: 3.27
+        },
+        {
+          soal: "Sebuah kolam berisi 12,6 liter air. Kemudian ditambahkan lagi 7,85 liter air. Berapa liter air di dalam kolam sekarang?",
+          jawaban: 20.45
+        },
+        {
+          soal: "Pak Andi memiliki 9,5 kg beras. Ia membagikan 3,75 kg kepada tetangganya. Berapa kilogram beras yang masih dimiliki Pak Andi?",
+          jawaban: 5.75
+        },
+        {
+          soal: "Siti membeli 2,4 kg apel dan 3,65 kg jeruk. Berapa total berat buah yang dibeli Siti?",
+          jawaban: 6.05
+        },
+        {
+          soal: "Terdapat 7,2 liter sirup yang akan dibagi rata ke dalam 6 botol. Berapa liter sirup yang ada di setiap botol?",
+          jawaban: 1.2
+        }
+      ];
 
-      setAllParams(params);
-      setDaftarSoal(data.daftarSoal);
+      setAllParams(dummySoal);
+      setDaftarSoal(dummySoal);
       setCurrentIndex(0);
-      setSoalAI(data.daftarSoal[0].soal);
+      setSoalAI(dummySoal[0].soal);
       setStep('simulasi');
+      return;
+
+      // const res = await fetch('/api/ai', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({
+      //     siswaId: siswaInfo.id,
+      //     citaCita: siswaInfo.cita_cita,
+      //     parameters: params.map(p => ({ id: p.id, tipe: p.tipe, angkaDasar: p.angka_dasar }))
+      //   })
+      // });
+      
+      // const data = await res.json();
+      
+      // if (!res.ok) throw new Error(data.error || 'Server menolak permintaan.');
+      // if (!data.daftarSoal || data.daftarSoal.length === 0) throw new Error('AI mengembalikan data kosong.');
+
+      // setAllParams(params);
+      // setDaftarSoal(data.daftarSoal);
+      // setCurrentIndex(0);
+      // setSoalAI(data.daftarSoal[0].soal);
+      // setStep('simulasi');
       
     } catch (err) {
       console.error("ERROR LOAD SOAL BATCH:", err);
@@ -120,7 +153,7 @@ export default function PendaftaranSiswa() {
     e.preventDefault();
     const currentParam = allParams[currentIndex];
 
-    if (Number(jawaban) === currentParam.jawaban_sistem) {
+    if (Math.abs(Number(jawaban) - currentParam.jawaban) < 0.001) { // awalnya jawaban_sistem, but karena diubah jadi simulasi itu jadinya pake .jawaban aja
       alert("🎉 BENAR! Melanjutkan ke soal berikutnya...");
       const newSkor = skor + 20;
       setSkor(newSkor);
@@ -201,7 +234,7 @@ export default function PendaftaranSiswa() {
         <div className="max-w-2xl mx-auto bg-white p-8 rounded-3xl border-2 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex justify-between mb-6">
             <span className="font-bold">SOAL {currentIndex + 1} / {allParams.length}</span>
-            <button onClick={() => setStep('dashboard')} className="font-bold underline">Kabur</button>
+            <button onClick={() => setStep('dashboard')} className="font-bold underline">Keluar</button>
           </div>
           <p className="text-lg font-medium mb-6 leading-relaxed">{soalAI}</p>
           <form onSubmit={handleKirimJawaban} className="space-y-4">
